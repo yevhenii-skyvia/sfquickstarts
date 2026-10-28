@@ -12,7 +12,9 @@ authors: TODO Author Full Name
 <!-- ------------------------ -->
 ## Overview
 
-Your sales and marketing teams work with customers in HubSpot, but the deal history that shows which customers matter most is easier to analyze in Snowflake. This quickstart connects the two with Skyvia, a no-code cloud data integration platform. You load HubSpot data into Snowflake, sort contacts into segments with SQL based on the value of their closed deals, and send the segment back to HubSpot, where your teams can use it in lists, workflows, and reports.
+Your sales and marketing teams work with customers in HubSpot, but it's easier to analyze which customers matter most in Snowflake. This quickstart connects the two with Skyvia, a no-code cloud data integration platform. You load HubSpot data into Snowflake, sort contacts into segments with SQL based on the value of their closed deals, and send the segment back to HubSpot, where your teams can use it in their workflows.
+
+Skyvia handles both directions in one platform: Replication loads data into Snowflake, and Import sends the results back to HubSpot. One platform solves everything, and the only code you write is the SQL to build the segment.
 
 You can complete this guide with free accounts and a ready-made test dataset.
 
@@ -40,9 +42,9 @@ You can complete this guide with free accounts and a ready-made test dataset.
 
 ### What You'll Build
 
-- A Skyvia replication that loads HubSpot contacts and deals into the RAW schema in Snowflake
+- A Skyvia Replication that loads HubSpot contacts and deals into the RAW schema in Snowflake
 - A SQL view in the MODELED schema that labels each contact as *High value* or *Standard* based on their closed-won deals
-- A Skyvia import that writes the segment to a HubSpot contact property
+- A Skyvia Import that writes the segment to a HubSpot contact property
 - A daily schedule that runs both integrations
 
 <!-- ------------------------ -->
@@ -52,7 +54,7 @@ This guide uses three accounts: Snowflake, HubSpot, and Skyvia. If you already h
 
 ### Create a HubSpot Account
 
-Create a new HubSpot account even if you already have one. The last steps of this guide write data to HubSpot contacts, and a separate account keeps your real CRM data safe.
+Create a new HubSpot account even if you already have one. The last steps of this guide write data to HubSpot, so a separate account keeps your real CRM data safe.
 
 1. Sign up for a [free HubSpot account](TODO-hubspot-signup-link) with your email address.
 2. Confirm your email address and follow the setup wizard steps. 
@@ -148,7 +150,7 @@ Run the setup script below to prepare Snowflake for Skyvia. It creates:
 <!-- ------------------------ -->
 ## Connect Skyvia
 
-A connection in Skyvia stores the credentials and settings that Skyvia needs to access a data source. You create a connection once and then reuse it in any integration that works with that data source.
+A connection stores credentials and settings that Skyvia needs to access a data source. You create a connection once and then reuse it in any integration that works with that data source.
 
 Create two connections, one to Snowflake and one to HubSpot. The integrations in the next steps use them to read and write data.
 
@@ -191,7 +193,9 @@ Create two connections, one to Snowflake and one to HubSpot. The integrations in
 <!-- ------------------------ -->
 ## Load Test Data
 
-Load sample contacts and deals into HubSpot with a Skyvia import. The test data consists of two CSV files:
+In Skyvia, integrations perform different jobs on data. Import is an integration that loads data from CSV files, databases, or cloud apps into a target. Import consists of tasks, where each task reads one source, writes to one target object, and maps the source columns to the target fields.
+
+Load sample contacts and deals into HubSpot using Skyvia import. The test data consists of two CSV files:
 
 - [contacts.csv](TODO-contacts-csv-link) with 100 fictional contacts
 - [deals.csv](TODO-deals-csv-link) with 100 deals, each linked to a contact by email address
@@ -204,7 +208,7 @@ Download both files before you start. You can also load them with the HubSpot im
 2. Click the default *Untitled* name and rename the import, for example, to *Load HubSpot test data*.
 3. Under **Source Type**, keep **CSV upload manually** selected.
 4. Under **Target**, select your HubSpot connection in the **Connection** list.
-5. Under **Options**, select the **Preserve task order** checkbox. The deals task looks up contacts by email, so contacts must be loaded first.
+5. Under **Options**, select the **Preserve task order** checkbox. The last task links deals to contacts, so both must be loaded before it runs.
 
    ![Import editor with HubSpot as the target](assets/skyvia-import-editor.png)
 
@@ -222,7 +226,7 @@ Download both files before you start. You can also load them with the HubSpot im
 
    ![Contacts as the target object](assets/skyvia-import-contacts-target.png)
 
-4. Click **Mapping definition** and check that all CSV columns are mapped. The columns have the same names as the HubSpot fields, so Skyvia maps them automatically.
+4. Click **Mapping definition** and check that all CSV columns are mapped. Mapping defines which source column fills each target field. The columns have the same names as the HubSpot fields, so Skyvia maps them automatically.
 
    ![Mapping for the Contacts task](assets/skyvia-import-contacts-mapping.png)
 
@@ -231,7 +235,7 @@ Download both files before you start. You can also load them with the HubSpot im
 ### Add the Deals Task
 
 1. Click **Add task**.
-2. Upload *deals.csv* to the **Upload CSV file** area.
+2. Drag *deals.csv* to the **Upload CSV file** area, or click **browse** and select the file.
 
    ![deals.csv uploaded](assets/skyvia-import-deals-source.png)
 
@@ -247,7 +251,7 @@ Download both files before you start. You can also load them with the HubSpot im
 
 ### Link Deals to Contacts
 
-HubSpot stores the link between a deal and a contact as an association, a separate record that references both. This task creates these records in the *DealContacts* object. It finds each deal by its name and each contact by its email address.
+In HubSpot, a deal is linked to a contact through an association. Skyvia shows deal-contact associations as the *DealContacts* object, where each record is a pair of a deal ID and a contact ID. This task creates these records. It finds each deal by its name and each contact by its email address.
 
 1. Click **Add task**.
 2. Upload *deals.csv* to the **Upload CSV file** area again. Skyvia renames the second copy to *deals1.csv*.
@@ -257,7 +261,8 @@ HubSpot stores the link between a deal and a contact as an association, a separa
 3. Click **Target definition**. In the **Target** list, select *DealContacts* and keep the **Insert** operation.
 
    ![DealContacts as the target object](assets/skyvia-import-dealcontacts-target.png)
-4. Click **Mapping definition**. Click the *Deal ID* column and select **Target Lookup**. Then specify the lookup:
+
+4. Click **Mapping definition**. The file has no HubSpot IDs, so get them with a target lookup: it finds a record in HubSpot by a value from the file and returns that record's ID. Click the *Deal ID* column and select **Target Lookup**. Then specify the lookup:
    - **Lookup Object**: *Deals*
    - **Result Column**: *Id*
    - Under **Lookup Key Column**, select *Deal Name*. Keep **Column** and select the *Deal Name* column of the file.
@@ -272,13 +277,13 @@ HubSpot stores the link between a deal and a contact as an association, a separa
 
 ### Run the Import
 
-The import now has three tasks. Because **Preserve task order** is on, Skyvia runs them from top to bottom, so contacts and deals exist before the link task looks them up.
+The import now has three tasks. Because **Preserve task order** is on, Skyvia runs them from top to bottom, so contacts and deals are added before the link task looks them up.
 
 ![Three tasks in the import](assets/skyvia-import-tasks.png)
 
 1. Click **Create** to save the import.
 2. Click **Run**.
-3. When the run completes, open the **Monitor** tab and click the run in **Run history**. Each task shows 100 success rows and 0 error rows.
+3. When the run completes, open the **Monitor** tab. It lists every run of the integration with the number of successfully processed and failed rows. Click the run in **Run history** to see the results for each task. Each task should show 100 success rows and 0 error rows.
 
    ![Import run results](assets/skyvia-import-run-results.png)
 
@@ -301,7 +306,7 @@ A replication copies HubSpot objects to Snowflake and creates the tables for the
 
    ![Snowflake as the target connection](assets/skyvia-replication-target.png)
 
-4. On the **Behaviour settings** step, keep the default settings and click **Continue**. With **Incremental Updates**, later runs load only the changes. With **Create new**, Skyvia creates the tables in the `RAW` schema.
+4. On the **Behaviour settings** step, keep the default settings. With **Incremental Updates**, later runs load only the changes. With **Create new**, Skyvia creates the tables in the `RAW` schema for you. When **Apply changes** is selected, Skyvia adds new HubSpot fields to these tables when they appear. Click **Continue**.
 
    ![Default behaviour settings](assets/skyvia-replication-behaviour.png)
 
@@ -381,7 +386,7 @@ You build the segment as a view in the `MODELED` schema. The view joins contacts
 <!-- ------------------------ -->
 ## Sync Segment to HubSpot
 
-Now write the segment back to HubSpot, so that sales and marketing teams can filter contacts and build lists by it. First, create a contact property for the segment. Then create an import that reads the `CONTACT_SEGMENTS` view and updates HubSpot contacts.
+Now write the segment back to HubSpot, so that sales and marketing teams can filter contacts by it. First, create a contact property for the segment. Then create an import that reads the `CONTACT_SEGMENTS` view and updates HubSpot contacts.
 
 ### Create the Segment Property
 
@@ -402,7 +407,7 @@ Now write the segment back to HubSpot, so that sales and marketing teams can fil
 
 ### Create the Import
 
-Go back to Skyvia and create an import that reads the segment from Snowflake and writes it to HubSpot.
+Switch back to Skyvia and create an import that reads the segment from Snowflake and writes it to HubSpot.
 
 1. Click **+ Create New** in the top menu and select **Import**.
 
@@ -428,7 +433,7 @@ The Snowflake connection points to the `RAW` schema, and the view is in `MODELED
 
    ![SQL command in the task editor](assets/skyvia-segment-import-source.png)
 
-4. Click **Target definition**. In the **Target** list, select *Contacts* and click **Update**. Under **Update type**, keep **Match by Primary Key**: the view returns the HubSpot contact IDs, so Skyvia finds each contact by its ID.
+4. Click **Target definition**. In the **Target** list, select *Contacts* and click **Update**. For **Update type**, keep **Match by Primary Key**: the view returns the HubSpot contact IDs, so Skyvia finds each contact without additional setup.
 
    ![Contacts as the target object](assets/skyvia-segment-import-target.png)
 
@@ -449,7 +454,7 @@ The Snowflake connection points to the `RAW` schema, and the view is in `MODELED
 
    ![Segment import run results](assets/skyvia-segment-import-run-results.png)
 
-4. In HubSpot, click **Contacts** in the left menu. Next to the quick filters above the table, click **+** and add *Customer Segment* as a quick filter.
+4. In HubSpot, click **Contacts** in the left menu. Next to the quick filters above the table, click **+** and add *Customer Segment*.
 5. Click the **Customer Segment** filter. Keep **is equal to any of**, type *High value* in the **Add values** box, and press **Enter**. The table shows the 21 high-value contacts.
 
    ![Customer Segment values in HubSpot](assets/hubspot-contacts-segment.png)
@@ -457,7 +462,7 @@ The Snowflake connection points to the `RAW` schema, and the view is in `MODELED
 <!-- ------------------------ -->
 ## Schedule Both Jobs
 
-So far, you've run both integrations manually. To keep the segment up to date as deals change in HubSpot, schedule them to run every day. The replication loads the changes to Snowflake, the view recalculates the segment, and the import writes the new labels back to HubSpot.
+So far, you've run both integrations manually. To keep the segment up to date as deals change in HubSpot, schedule integrations to run every day. The replication loads the changes to Snowflake, the view recalculates the segment, and the import writes the new labels back to HubSpot.
 
 The import reads data that the replication loads, so schedule it to start after the replication. With the test data, the replication takes about a minute, so a 30-minute gap is enough.
 
@@ -481,7 +486,7 @@ The import reads data that the replication loads, so schedule it to start after 
 <!-- ------------------------ -->
 ## Conclusion And Resources
 
-You've built a round trip between HubSpot and Snowflake. Skyvia replicates HubSpot contacts, deals, and their associations to Snowflake, a SQL view assigns each contact a segment, and a Skyvia import writes the segment back to HubSpot every day.
+You've built a round trip between HubSpot and Snowflake. Skyvia replicates HubSpot contacts, deals, and their associations to Snowflake, a SQL view assigns each contact a segment, and a Skyvia import writes the segment back to HubSpot every day. You built both directions at one platform, without writing code.
 
 You can extend this setup in several ways:
 
@@ -500,6 +505,7 @@ You can extend this setup in several ways:
 
 ### Related Resources
 
+- [HubSpot and Snowflake Integration with Skyvia](https://skyvia.com/data-integration/integrate-hubspot-snowflake)
 - [Skyvia Replication](https://docs.skyvia.com/data-integration/replication/)
 - [Skyvia Import](https://docs.skyvia.com/data-integration/import/)
 - [Scheduling Integrations in Skyvia](https://docs.skyvia.com/data-integration/scheduling-integrations-for-automatic-execution.html)

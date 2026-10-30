@@ -1,51 +1,56 @@
 id: hubspot-snowflake-round-trip-with-skyvia
 categories: snowflake-site:taxonomy/solution-center/certification/quickstart, snowflake-site:taxonomy/solution-center/certification/partner-solution, snowflake-site:taxonomy/product/data-engineering, snowflake-site:taxonomy/snowflake-feature/ingestion, snowflake-site:taxonomy/snowflake-feature/connectors
 language: en
-summary: Load HubSpot data into Snowflake, build a customer segment in SQL and sync it back to HubSpot with Skyvia.
+summary: Replicate HubSpot data to Snowflake, build a customer segment in SQL and sync it back to HubSpot with reverse ETL in Skyvia.
 environments: web
 status: Published
 feedback link: https://github.com/Snowflake-Labs/sfguides/issues
-authors: TODO Author Full Name
+author: TODO Author Full Name
 
 
-# Sync HubSpot and Snowflake Both Ways with Skyvia
+# HubSpot to Snowflake and Back: ELT and Reverse ETL with Skyvia
 <!-- ------------------------ -->
 ## Overview
 
-Your sales and marketing teams work with customers in HubSpot, but it's easier to analyze which customers matter most in Snowflake. This quickstart connects the two with Skyvia, a no-code cloud data integration platform. You load HubSpot data into Snowflake, sort contacts into segments with SQL based on the value of their closed deals, and send the segment back to HubSpot, where your teams can use it in their workflows.
+Customer data often lives in a CRM like HubSpot, while analysis happens in Snowflake, where it can be combined with billing, product usage and other sources. For that analysis to pay off, data has to move both ways. HubSpot data needs to reach Snowflake and stay up to date. The results, such as a customer segment or a score, need to go back to HubSpot, where sales and marketing teams use them in lists, filters and workflows.
 
-Skyvia handles both directions in one platform: Replication loads data into Snowflake, and Import sends the results back to HubSpot. One platform solves everything, and the only code you write is the SQL to build the segment.
+These two directions are often handled separately: one tool or script loads data into the warehouse, and another one sends the results back. That means two setups to build, schedule and monitor.
 
-You can complete this guide with free accounts and a ready-made test dataset.
+In this quickstart, you build both directions in Skyvia, a managed cloud data integration platform. A simple customer segment serves as the example:
+
+1. **Load.** Skyvia Replication loads HubSpot contacts, deals and their associations into Snowflake and keeps them up to date.
+2. **Transform.** A SQL view in Snowflake labels each contact *High value* or *Standard* based on the total of their closed-won deals.
+3. **Sync back.** Skyvia Import writes the label to a HubSpot contact property. This step is reverse ETL: data goes from the warehouse back to a business app.
+
+Both integrations run on a daily schedule. The only code you write is the SQL for the segment.
+
+To keep the example small, the segment uses only HubSpot deals. In a real project, the same setup works for any result you calculate in Snowflake, for example a churn risk score based on product usage and support tickets.
 
 ![Data flow between HubSpot, Skyvia, and Snowflake](assets/hubspot-skyvia-snowflake-flow.png)
 
 ### Prerequisites
 
-- A web browser
-- Basic understanding of CRMs and SQL
-
-### What You'll Learn
-
-- How to connect Skyvia to Snowflake and HubSpot
-- How to replicate HubSpot objects to Snowflake with Skyvia
-- How to build a customer segment in Snowflake with SQL
-- How to import the segment back to HubSpot contacts
-- How to schedule both integrations to keep the data in sync
+- Basic knowledge of SQL
+- Familiarity with HubSpot contacts and deals
 
 ### What You'll Need
 
 - A [Snowflake account](https://signup.snowflake.com/?utm_source=snowflake-devrel&utm_medium=developer-guides&utm_cta=developer-guides) or a free trial
-- A [Skyvia account](TODO-skyvia-signup-link) on a free trial
-- A [HubSpot account](TODO-hubspot-signup-link). Create a new one for this guide, because the last steps write data to HubSpot contacts.
-- The test data: two CSV files with sample HubSpot contacts and deals (TODO-test-data-link)
+- A [Skyvia account](https://app.skyvia.com/register?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership). New accounts start with a free trial of the Professional plan, which covers everything in this guide.
+- A new [free HubSpot account](https://www.hubspot.com/). Don't use your production CRM: the last steps write data to HubSpot contacts.
+- The test data: two CSV files with fictional contacts and deals ([download from GitHub](https://github.com/yevhenii-skyvia/snowflake-test-data))
+
+### What You'll Learn
+
+- How to connect Skyvia to Snowflake with a programmatic access token and to HubSpot with OAuth
+- How to replicate HubSpot objects to Snowflake
+- How to build a customer segment as a SQL view
+- How to sync the segment back to HubSpot with reverse ETL
+- How to schedule both integrations
 
 ### What You'll Build
 
-- A Skyvia Replication that loads HubSpot contacts and deals into the RAW schema in Snowflake
-- A SQL view in the MODELED schema that labels each contact as *High value* or *Standard* based on their closed-won deals
-- A Skyvia Import that writes the segment to a HubSpot contact property
-- A daily schedule that runs both integrations
+- A daily pipeline that keeps a *Customer Segment* property in HubSpot up to date with a segment calculated in Snowflake
 
 <!-- ------------------------ -->
 ## Set Up Your Accounts
@@ -56,7 +61,7 @@ This guide uses three accounts: Snowflake, HubSpot, and Skyvia. If you already h
 
 Create a new HubSpot account even if you already have one. The last steps of this guide write data to HubSpot, so a separate account keeps your real CRM data safe.
 
-1. Sign up for a [free HubSpot account](TODO-hubspot-signup-link) with your email address.
+1. Sign up for a [free HubSpot account](https://www.hubspot.com/) with your email address.
 2. Confirm your email address and follow the setup wizard steps. 
 3. If the wizard offers to create a deal pipeline, click **Continue without a pipeline**. This guide uses the default Sales Pipeline.
 
@@ -69,12 +74,12 @@ Create a new HubSpot account even if you already have one. The last steps of thi
 
 ### Create a Skyvia Account
 
-1. Sign up for a [Skyvia account](TODO-skyvia-signup-link).
+1. Sign up for a [Skyvia account](https://app.skyvia.com/register?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership).
 2. Confirm your email address and sign in.
 3. Complete the setup wizard:
    - On the **About You** page, enter your details.
    - On the **Your Role** page, select any suitable role.
-   - On the **Your Goals** page, select **I'm just checking out the product** and click **Continue**. We will cover main platform details in this topic.
+   - On the **Your Goals** page, select **I'm just checking out the product** and click **Continue**.
    - On the **Choose how to start your journey** page, select **I'm ready** and click **Continue**.
 
    ![I'm ready option in the Skyvia setup wizard](assets/skyvia-setup-wizard-im-ready.png)
@@ -147,6 +152,8 @@ Run the setup script below to prepare Snowflake for Skyvia. It creates:
 
 4. Copy the `token_secret` value from the result of the last statement. You need it in the next step. Snowflake displays the token only once.
 
+   The token expires in 90 days. To get a new one, run `ALTER USER SKYVIA_USER ROTATE PROGRAMMATIC ACCESS TOKEN SKYVIA_PAT;` and update the token in the Skyvia connection.
+
 <!-- ------------------------ -->
 ## Connect Skyvia
 
@@ -197,8 +204,8 @@ In Skyvia, integrations perform different jobs on data. Import is an integration
 
 Load sample contacts and deals into HubSpot using Skyvia import. The test data consists of two CSV files:
 
-- [contacts.csv](TODO-contacts-csv-link) with 100 fictional contacts
-- [deals.csv](TODO-deals-csv-link) with 100 deals, each linked to a contact by email address
+- [contacts.csv](https://raw.githubusercontent.com/yevhenii-skyvia/snowflake-test-data/main/contacts.csv) with 100 fictional contacts
+- [deals.csv](https://raw.githubusercontent.com/yevhenii-skyvia/snowflake-test-data/main/deals.csv) with 100 deals, each linked to a contact by email address
 
 Download both files before you start. You can also load them with the HubSpot import tool instead of Skyvia.
 
@@ -386,7 +393,7 @@ You build the segment as a view in the `MODELED` schema. The view joins contacts
 <!-- ------------------------ -->
 ## Sync Segment to HubSpot
 
-Now write the segment back to HubSpot, so that sales and marketing teams can filter contacts by it. First, create a contact property for the segment. Then create an import that reads the `CONTACT_SEGMENTS` view and updates HubSpot contacts.
+Now write the segment back to HubSpot with reverse ETL, so that sales and marketing teams can filter contacts by it. First, create a contact property for the segment. Then create an import that reads the `CONTACT_SEGMENTS` view and updates HubSpot contacts.
 
 ### Create the Segment Property
 
@@ -460,7 +467,7 @@ The Snowflake connection points to the `RAW` schema, and the view is in `MODELED
    ![Customer Segment values in HubSpot](assets/hubspot-contacts-segment.png)
 
 <!-- ------------------------ -->
-## Schedule Both Jobs
+## Schedule Both Integrations
 
 So far, you've run both integrations manually. To keep the segment up to date as deals change in HubSpot, schedule integrations to run every day. The replication loads the changes to Snowflake, the view recalculates the segment, and the import writes the new labels back to HubSpot.
 
@@ -484,15 +491,33 @@ The import reads data that the replication loads, so schedule it to start after 
 3. Click **Save** in the **Schedule** window, and then click **Save** in the import editor.
 
 <!-- ------------------------ -->
+## Clean Up Resources
+
+When you no longer need the setup, disable the schedules and remove the Snowflake objects that this guide created.
+
+1. In Skyvia, open the replication and click **Schedule**. Under **State**, click **Disabled**, click **Save** in the **Schedule** window, and then click **Save** in the replication editor.
+2. Do the same for the import.
+3. In Snowflake, run the following script:
+
+   ```sql
+   USE ROLE ACCOUNTADMIN;
+   DROP USER IF EXISTS SKYVIA_USER;
+   DROP NETWORK POLICY IF EXISTS SKYVIA_POLICY;
+   DROP DATABASE IF EXISTS HUBSPOT_DEMO;
+   DROP WAREHOUSE IF EXISTS SKYVIA_WH;
+   DROP ROLE IF EXISTS SKYVIA_ROLE;
+   ```
+
+<!-- ------------------------ -->
 ## Conclusion And Resources
 
-You've built a round trip between HubSpot and Snowflake. Skyvia replicates HubSpot contacts, deals, and their associations to Snowflake, a SQL view assigns each contact a segment, and a Skyvia import writes the segment back to HubSpot every day. You built both directions at one platform, without writing code.
+You've built a round trip between HubSpot and Snowflake. Skyvia replicates HubSpot contacts, deals, and their associations to Snowflake, a SQL view assigns each contact a segment, and a Skyvia import writes the segment back to HubSpot every day. You built both directions in one platform, and the only code you wrote was the segment SQL.
 
 You can extend this setup in several ways:
 
 - Add more objects to the replication, such as *Companies*, and build segments for them.
-- Run the replication and the import as one [control flow](https://docs.skyvia.com/data-integration/control-flow/) so that the import starts right after the replication finishes.
-- Move the segment SQL to a dbt project and run it with [dbt in Skyvia](https://docs.skyvia.com/data-integration/dbt-transformation/) when your models grow.
+- Run the replication and the import as one [control flow](https://docs.skyvia.com/data-integration/control-flow/?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership) so that the import starts right after the replication finishes.
+- Move the segment SQL to a dbt project and run it with [dbt in Skyvia](https://docs.skyvia.com/data-integration/dbt-transformation/?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership) when your models grow.
 
 ### What You Learned
 
@@ -505,12 +530,12 @@ You can extend this setup in several ways:
 
 ### Related Resources
 
-- [HubSpot and Snowflake Integration with Skyvia](https://skyvia.com/data-integration/integrate-hubspot-snowflake)
-- [Skyvia Replication](https://docs.skyvia.com/data-integration/replication/)
-- [Skyvia Import](https://docs.skyvia.com/data-integration/import/)
-- [Scheduling Integrations in Skyvia](https://docs.skyvia.com/data-integration/scheduling-integrations-for-automatic-execution.html)
-- [Skyvia HubSpot Connector](https://docs.skyvia.com/connectors/cloud-sources/hubspot_connections.html)
-- [Skyvia Snowflake Connector](https://docs.skyvia.com/connectors/databases/snowflake_connections.html)
+- [HubSpot and Snowflake Integration with Skyvia](https://skyvia.com/data-integration/integrate-hubspot-snowflake?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
+- [Skyvia Replication](https://docs.skyvia.com/data-integration/replication/?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
+- [Skyvia Import](https://docs.skyvia.com/data-integration/import/?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
+- [Scheduling Integrations in Skyvia](https://docs.skyvia.com/data-integration/scheduling-integrations-for-automatic-execution.html?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
+- [Skyvia HubSpot Connector](https://docs.skyvia.com/connectors/cloud-sources/hubspot_connections.html?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
+- [Skyvia Snowflake Connector](https://docs.skyvia.com/connectors/databases/snowflake_connections.html?utm_source=snowflake_quickstart&utm_medium=referral&utm_campaign=snowflake_partnership)
 - [Snowflake Programmatic Access Tokens](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens)
 - [Snowflake Network Policies](https://docs.snowflake.com/en/user-guide/network-policies)
 - [HubSpot Properties](https://knowledge.hubspot.com/properties/create-and-edit-properties)
